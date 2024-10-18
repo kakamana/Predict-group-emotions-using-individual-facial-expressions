@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.tif
+*.tiff
+
+# Model weights
+*.weights
+*.pt
+*.pth
+*.h5
+
+# Libraries
+*.so
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Zip files
+*.zip
+*.gz
+*.tar
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Data files
+*.csv
+*.json
+*.xml
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
