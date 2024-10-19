@@ -13,6 +13,7 @@ import cv2
 import os
 import glob
 from PIL import Image
+from datetime import datetime
 
 
 # Define emotions
@@ -23,6 +24,18 @@ epochs = 100
 lr = 1e-3
 batch_size = 64
 img_dims = (96, 96, 3)
+
+# Set up device
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+device = get_device()
+print(f"Using device: {device}")
 
 # Custom Dataset
 class FacialExpressionDataset(Dataset):
@@ -182,7 +195,11 @@ def plot_confusion_matrix(cm, class_names):
     plt.title('Confusion Matrix')
     plt.xlabel('Predicted')
     plt.ylabel('True')
-    plt.savefig('confusion_matrix.png')
+    # Generate timestamp
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Create filename with timestamp
+    filename = f'./ModelsOutputCharts/confusion_matrix_{timestamp}.png'
+    plt.savefig(filename)
     plt.close()
 
 
@@ -205,8 +222,13 @@ def plot_training_history(train_losses, val_losses, train_accs, val_accs):
     plt.ylabel('Accuracy')
     plt.legend()
 
+    # Generate timestamp
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Create filename with timestamp
+    filename = f'./ModelsOutputCharts/training_history_{timestamp}.png'
+
     plt.tight_layout()
-    plt.savefig('training_history.png')
+    plt.savefig(filename)
     plt.close()
 
 # Main execution
@@ -217,7 +239,7 @@ if __name__ == "__main__":
     random.seed(42)
 
     # Load and preprocess data
-    data_path = './FacialExpression'
+    data_path = './dataset/FacialExpression'
     data, labels = load_data(data_path)
 
     # Split the data
@@ -245,7 +267,7 @@ if __name__ == "__main__":
 
     # Initialize the model
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    #device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model = FacialExpressionModel(num_classes=len(EMOTIONS_LIST)).to(device)
 
     # Define loss function and optimizer
@@ -256,7 +278,7 @@ if __name__ == "__main__":
     train_losses, val_losses, train_accs, val_accs = train(model, train_loader, test_loader, criterion, optimizer, device, epochs)
 
     # Save the model weights /content/drive/MyDrive/Colab Notebooks/dataset
-    torch.save(model.state_dict(), './model/facial_expression_recognition_weights.pth')
+    torch.save(model.state_dict(), './Models/facial_expression_recognition_weights.pth')
 
     # Generate and plot confusion matrix
     cm = generate_confusion_matrix(model, test_loader, device)
