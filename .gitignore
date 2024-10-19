@@ -26,6 +26,7 @@ ENV/
 *.pt
 *.pth
 *.h5
+*.dat
 
 # Libraries
 *.so
