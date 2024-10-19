@@ -31,7 +31,7 @@ def get_device():
         return torch.device("cpu")
 
 device = get_device()
-print(f"Using device: {device}")
+#print(f"Using device: {device}")
 
 # Define model (FacialExpressionModel class remains the same)
 class FacialExpressionModel(nn.Module):    
@@ -136,47 +136,111 @@ def load_facial_expression_model(weights_path):
     return model
 
 # Function to fine-tune the model
-def fine_tune_model(model, train_loader, val_loader, num_epochs=10, lr=0.0001):
+def fine_tune_model(model, train_loader, val_loader, num_epochs=30, lr=1e-5):
+    # Freeze early layers
+    for param in model.features[:6].parameters():
+        param.requires_grad = False
+    
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
     
     best_val_loss = float('inf')
+    train_losses,val_losses = [],[]
+    epochs_no_improve = 0
+    early_stop_threshold = 5
+    
+
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
+        all_preds,all_labels = [],[]
         
-        for inputs, _ in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            inputs = inputs.to(device)
+        for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+            inputs, labels = inputs.to(device), labels.to(device)
             
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = criterion(outputs, torch.zeros(inputs.size(0), dtype=torch.long).to(device))
+            #loss = criterion(outputs, torch.zeros(inputs.size(0), dtype=torch.long).to(device))
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             
             train_loss += loss.item() * inputs.size(0)
+            _, preds = torch.max(outputs, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
         
-        train_loss = train_loss / len(train_loader.dataset)
+        train_loss /= len(train_loader.dataset)
+        train_losses.append(train_loss)
         
         # Validation
         model.eval()
         val_loss = 0.0
-        with torch.no_grad():
-            for inputs, _ in val_loader:
-                inputs = inputs.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, torch.zeros(inputs.size(0), dtype=torch.long).to(device))
-                val_loss += loss.item() * inputs.size(0)
+        val_preds,val_labels = [],[]
         
-        val_loss = val_loss / len(val_loader.dataset)
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item() * inputs.size(0)
+                _, preds = torch.max(outputs, 1)
+                val_preds.extend(preds.cpu().numpy())
+                val_labels.extend(labels.cpu().numpy())
+        
+        val_loss /= len(val_loader.dataset)
+        val_losses.append(val_loss)
         
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+
+        scheduler.step(val_loss)
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), './Models/FineTunedModelForCeleb/best_fine_tuned_model.pth')
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve == early_stop_threshold:
+                print(f"Early stopping triggered after {epoch+1} epochs")
+                break
+
+        # Plot and save confusion matrix for each epoch
+        cm = confusion_matrix(val_labels, val_preds)
+        plot_confusion_matrix(cm, EMOTIONS_LIST, epoch)
+
+    # Plot and save train/val loss
+    plot_train_val_loss(train_losses, val_losses)
     
     print("Fine-tuning completed. Best model saved as 'best_fine_tuned_model.pth'")
+
+def plot_confusion_matrix(cm, class_names, epoch):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
+    plt.title(f'Confusion Matrix - Epoch {epoch+1}')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Create filename with timestamp
+    filename = f'./ModelsOutputCharts/confusion_matrix_epoch_{epoch+1}_{timestamp}.png'
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_train_val_loss(train_losses, val_losses):
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(train_losses)+1), train_losses, label='Train Loss')
+    plt.plot(range(1, len(val_losses)+1), val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Create filename with timestamp
+    filename = f'./ModelsOutputCharts/train_val_loss_{timestamp}.png'
+    plt.savefig(filename)
+    plt.close()    
 
 # Function to preprocess image for facial expression recognition
 def preprocess_image(image):
@@ -336,7 +400,7 @@ def process_and_save_image(yolo_model, emotion_model, image_path, output_folder)
 
 # Configuration dictionary to control the execution of each step
 config = {
-    "split_dataset": True,
+    "split_dataset": False,
     "load_pretrained_model": True,
     "prepare_datasets": True,
     "fine_tune_model": True,
@@ -355,6 +419,8 @@ if __name__ == "__main__":
     val_dir = 'dataset/valCelb'
     facial_expression_weights = './Models/facial_expression_recognition_weights.pth'
     output_folder = 'output'
+    train_loader = None
+    val_loader = None
 
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
@@ -386,8 +452,10 @@ if __name__ == "__main__":
 
     # Step 4: Fine-tune the model
     if config["fine_tune_model"]:
+        if train_loader is None or val_loader is None:
+            raise ValueError("Datasets not prepared. Set config['prepare_datasets'] to True.")
         print("Starting fine-tuning...")
-        fine_tune_model(emotion_model, train_loader, val_loader, num_epochs=10)
+        fine_tune_model(emotion_model, train_loader, val_loader, num_epochs=30)
 
     # Step 5: Load the best fine-tuned model
     if config["load_fine_tuned_model"]:

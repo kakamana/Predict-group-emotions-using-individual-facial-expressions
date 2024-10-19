@@ -47,11 +47,15 @@ def extract_lbp_features(image):
     return hist
 
 def extract_facial_landmarks(image):
+    # Convert float32 image back to uint8
+    image_uint8 = (image * 255).astype(np.uint8)
+
     detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+    predictor = dlib.shape_predictor("./Models/shape_predictor_68_face_landmarks.dat")
     
-    faces = detector(image, 1)
+    faces = detector(image_uint8, 1)
     if len(faces) == 0:
+        print(f"No faces detected. Image shape: {image.shape}, dtype: {image.dtype}, min: {image.min()}, max: {image.max()}")
         return None
     
     shape = predictor(image, faces[0])
@@ -79,9 +83,15 @@ def extract_features(image):
     preprocessed_image = preprocess_image(image)
     augmented_image = augment_image(preprocessed_image)
     
-    hog_features = extract_hog_features(augmented_image)
+    """ hog_features = extract_hog_features(augmented_image)
     lbp_features = extract_lbp_features(augmented_image)
-    landmarks = extract_facial_landmarks(augmented_image)
-    deep_features = extract_deep_features(augmented_image)
+    landmarks = extract_facial_landmarks(augmented_image) """
+    hog_features = extract_hog_features(preprocessed_image)
+    lbp_features = extract_lbp_features(preprocessed_image)
+    landmarks = extract_facial_landmarks(preprocessed_image)
+    #deep_features = extract_deep_features(augmented_image)
+
+    if landmarks is None:
+        return None
     
-    return np.concatenate([hog_features, lbp_features, landmarks, deep_features])
+    return np.concatenate([hog_features, lbp_features, landmarks])
