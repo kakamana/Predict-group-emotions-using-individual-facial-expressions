@@ -19,10 +19,10 @@ from PCAVisualization import apply_pca, visualize_pca
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
-# Define emotions list
+# List of possible emotions of classify
 EMOTIONS_LIST = ["Angry", "Disgust", "Fear", "Happy", "Neutral", "Sad", "Surprise"]
 
-# Set up device
+# Function to get the available device for computation (CPU, GPU, or Apple MPS)
 def get_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -31,10 +31,11 @@ def get_device():
     else:
         return torch.device("cpu")
 
+# Get device to use for model inference
 device = get_device()
 print(f"Using device: {device}")
 
-# Define model
+# Define the facial expression recognition model using convolutional layers
 class FacialExpressionModel(nn.Module):    
     def __init__(self, num_classes):
         super(FacialExpressionModel, self).__init__()
@@ -79,13 +80,13 @@ class FacialExpressionModel(nn.Module):
 
 @st.cache_resource
 def load_models():
-    # Load emotion recognition model
+    # Load pre-trained facial emotion recognition model
     emotion_model = FacialExpressionModel(num_classes=len(EMOTIONS_LIST))
     emotion_model.load_state_dict(torch.load('./Models/facial_expression_recognition_weights.pth', map_location=device))
     emotion_model.to(device)
     emotion_model.eval()
 
-    # Load YOLO model
+    # Load pre-trained YOLO model for face detection
     yolo_model = YOLO('./YoloModels/yolov8n-face.pt')
 
     # Load Autoencoder model
@@ -98,6 +99,7 @@ def load_models():
     return emotion_model, yolo_model, autoencoder
     #return emotion_model, yolo_model
 
+# Process a single input image to detect faces and analyze emotions
 def preprocess_image(image):
     transform = transforms.Compose([
         transforms.Resize((96, 96)),
@@ -239,10 +241,11 @@ def calculate_inertia(features, max_clusters):
         inertias.append(kmeans.inertia_)
     return inertias    
 
+# Main function for the Streamlit app
 def main():
-    st.title("Milestone II: Facial Emotion Recognition App")
+    st.title("FacialFusion: Facial Emotion Recognition App")
 
-    # Load models
+    # Load pre-trained models
     emotion_model, yolo_model, autoencoder  = load_models()
     #emotion_model, yolo_model  = load_models()
 
@@ -340,7 +343,7 @@ def main():
         else:
             st.write("Please upload some images to process.")
 
-    # Choose between image and video
+    # Allow user to choose between image or video input
     input_type = st.radio("Choose input type:", ("Image", "Video"))
 
     if input_type == "Image":
@@ -363,17 +366,19 @@ def main():
                 st.subheader("Processed Image")
                 st.image(boxed_image, use_column_width=True)
 
-            # Results section
+            # Display emotion recognition results
             st.subheader("Emotion Recognition Results")
             st.write(f"Total faces: {total_faces}")
             st.write(f"Group Emotion: {group_emotion}")
             for detail in emotion_details:
                 st.write(detail)
     elif input_type == "Video":
+        # Allow user to choose between uploading a video or using live camera input
         video_source = st.radio("Choose video source:", ("Upload Video", "Live Camera"))
         if video_source == "Upload Video":
             uploaded_video = st.file_uploader("Choose a video...", type=["mp4", "avi", "mov"])
             if uploaded_video is not None:
+                # Save video to temporary file
                 tfile = tempfile.NamedTemporaryFile(delete=False) 
                 tfile.write(uploaded_video.read())
                 st.video(tfile.name)
